@@ -1,0 +1,12 @@
+install.packages(c("devtools", "sf", "tidymodels"))
+
+install.packages("reticulate")
+remotes::install_github("rstudio/tensorflow")
+reticulate::install_python()
+library(tensorflow)
+install_tensorflow(envname = "r-tensorflow")
+install.packages("keras")
+library(keras)
+install_keras()
+library(tensorflow)
+tf$constant("Hello TensorFlow!")

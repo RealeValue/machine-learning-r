@@ -1,0 +1,154 @@
+version: "3.7"
+
+services:
+
+  rstudio:
+    image: "ghcr.io/${CONTAINER_REG_USER}/${CONTAINER_TIDYMODELS_REG_NAME}:latest"
+    container_name: "${PROJECT_NAME}_rstudio"
+    hostname: rstudio
+    stop_grace_period: 60s
+    restart: always
+    environment:
+      USER: $R_STUDIO_USER
+      PASSWORD: $R_STUDIO_PASSWORD
+      ROOT: "TRUE"
+      DISABLE_AUTH: "TRUE"
+      R_SEED: $R_SEED
+      MLFLOW_TRACKING_URI: $MLFLOW_TRACKING_URI
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+      AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+    ports:
+      - ${R_STUDIO_PORT}:8787 
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./tutorials:/home/user
+
+  minio:
+    image: "minio/minio:${MINIO_TAG}"
+    container_name: "${PROJECT_NAME}_minio"
+    hostname: minio
+    working_dir: "/minio/storage"
+    volumes:
+        - ./data/minio:/minio/storage
+    ports:
+      - "${MINIO_PORT}:9000"
+    environment:
+      MINIO_ACCESS_KEY: $MINIO_ACCESS_KEY
+      MINIO_SECRET_KEY: $MINIO_SECRET_KEY
+    command: server /minio/storage
+        
+  mlflow:
+    image: "ghcr.io/${CONTAINER_REG_USER}/${CONTAINER_MLFOW_REG_NAME}:latest"
+    container_name: "${PROJECT_NAME}_mlflow"
+    hostname: mlflow
+    restart: always
+    stop_grace_period: 60s
+    environment:
+      MLFLOW_LABEL: $MLFLOW_LABEL
+      MLFLOW_BACKEND_STORE_URI: $MLFLOW_BACKEND_STORE_URI
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+      AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+    ports:
+      - ${MLFLOW_PORT}:5000
+    command: >
+      mlflow server --serve-artifacts --host 0.0.0.0 --port 5000 --backend-store-uri "${MLFLOW_BACKEND_STORE_URI}" --default-artifact-root s3://mlflow/
+
+  postgres:
+    image: "postgres:${POSTGRES_TAG}"
+    container_name: "${PROJECT_NAME}_postgres"
+    hostname: postgres
+    restart: always
+    stop_grace_period: 60s
+    environment:
+      POSTGRES_PASSWORD: $DB_PASSWORD
+      POSTGRES_DB: $DB_NAME
+      POSTGRES_USER: $DB_USER
+    ports:
+      - ${DB_PORT}:5432
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+
+  grafana:
+    image: "grafana/grafana:${GRAFANA_TAG}"
+    container_name: "${PROJECT_NAME}_grafana"
+    user: "0"
+    hostname: grafana
+    restart: always
+    stop_grace_period: 60s
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    environment:
+      GF_INSTALL_PLUGINS: $GF_INSTALL_PLUGINS
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+      - ./services/grafana/grafana.ini:/etc/grafana/grafana.ini
+
+  adminer:
+    image: "adminer:${ADMINER_TAG}"
+    container_name: "${PROJECT_NAME}_adminer"
+    stop_grace_period: 60s
+    restart: always
+    ports:
+      - ${ADMINER_PORT}:8080
+
+  # zookeeper:
+  #   image: "confluentinc/cp-zookeeper:${ZOOKEEPER_TAG}"
+  #   container_name: "${PROJECT_NAME}_zookeeper"
+  #   hostname: zookeeper
+  #   stop_grace_period: 60s
+  #   environment:
+  #     ZOOKEEPER_CLIENT_PORT: $ZOOKEEPER_CLIENT_PORT
+  #   ports:
+  #     - "${ZOOKEEPER_PORT}:32181"
+
+  # kafka:
+  #   image: "confluentinc/cp-kafka:${KAFKA_TAG}"
+  #   container_name: "${PROJECT_NAME}_kafka"
+  #   hostname: kafka
+  #   stop_grace_period: 60s
+  #   environment:
+  #     KAFKA_BROKER_ID: 1
+  #     KAFKA_ZOOKEEPER_CONNECT: zookeeper:32181
+  #     KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+  #     KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  #     KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+  #   ports:
+  #     - "${KAFKA_PORT}:9092"
+  #   restart: always
+  #   depends_on:
+  #     - zookeeper
+
+  rstudio_mlflow_serve_lm:
+    image: "ghcr.io/${CONTAINER_REG_USER}/${CONTAINER_TIDYMODELS_REG_NAME}:latest"
+    container_name: "${PROJECT_NAME}_rstudio_mlflow_serve_lm"
+    hostname: rstudio_mlflow_serve_lm
+    stop_grace_period: 60s
+    restart: always
+    environment:
+      USER: $R_STUDIO_USER
+      PASSWORD: $R_STUDIO_PASSWORD
+      ROOT: "TRUE"
+      DISABLE_AUTH: "TRUE"
+      R_SEED: $R_SEED
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+      AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+    ports:
+      - ${R_STUDIO_MLFLOW_SERVE_PORT}:9000 
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./tutorials:/home/user
+    command: conda run -n r-mlflow-1.30.0 mlflow models serve -m "models:/sw_lm/1" -h 0.0.0.0 -p 9000 
+
+networks:
+  default:
+      name: docker-r-mlops
